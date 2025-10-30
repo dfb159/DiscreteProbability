@@ -1,0 +1,16 @@
+[project]
+name = "discrete-probability"
+version = "0.1.0"
+description = "Describe discrete probability distributions and track their behaviour over functions."
+authors = [{ name = "Jonathan Sigrist" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+#[tool.poetry.scripts]
+#cli_script = 'script.py:main'
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
