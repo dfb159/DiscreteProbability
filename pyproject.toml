@@ -1,6 +1,6 @@
 [project]
 name = "discrete_probability"
-version = "0.1.0"
+version = "0.1.1"
 description = "Describe discrete probability distributions and track their behaviour over functions."
 authors = [{ name = "Jonathan Sigrist", email = "github@dfb159.anonaddy.com" }]
 license = { text = "MIT" }
@@ -15,6 +15,7 @@ dependencies = [
 packages = [
     { include = "discrete_probability", from = "src" }
 ]
+repository = "https://github.com/dfb159/discrete_probability"
 
 [tool.poetry.scripts]
 dev = 'scripts.scripts:dev'
