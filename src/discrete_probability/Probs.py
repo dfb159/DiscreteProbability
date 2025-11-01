@@ -68,7 +68,7 @@ def wrap_object[P: (
     Decimal,
     Fraction,
 ), R](default):
-    def decorator(func: Callable[Concatenate[Probs[P], ...], Number[P]]) -> Callable[Concatenate[Probs[P] | object, ...], Number[P] | R]:
+    def decorator(func: Callable[Concatenate["Probs[P]", ...], Number[P]]) -> Callable[Concatenate["Probs[P] | object", ...], Number[P] | R]:
         def wrapper(*values: Merged[P] | object):
             if all(map(lambda v: isinstance(v, (int, float, Decimal, Fraction, Probs)), values)):
                 return func(*values)  # type: ignore
@@ -90,23 +90,23 @@ class Probs[P: (float, Decimal, Fraction)]:
         Args:
             values (Iterable[Tuple[K, P]]): Iterator with all value pairs.
         """
-        self.values = defaultdict()
+        self.values = defaultdict(int)
         for v, p in values:
             self.values[v] += p
 
     def __contains__(self, element: Number[P]) -> bool:
         return element in self.values
 
-    def __getitem__(self, index: Number[P]) -> Number[P] | None:
+    def __getitem__(self, index: Number[P]) -> Number[P]:
         if index not in self.values:
-            return None
+            return 0
         return self.values[index]
 
     def __iter__(self):
         for x in self.values.items():
             yield x
 
-    def mean(self):
+    def mean(self) -> Number[P]:
         return sum(k * v for k, v in self)
 
     def __repr__(self):
