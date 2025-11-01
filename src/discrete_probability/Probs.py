@@ -5,71 +5,109 @@ from itertools import product
 from collections import defaultdict
 from math import prod
 from operator import add, mul, sub
-from typing import Callable, Iterable, Self, Tuple, TypeVar, Union, cast
+from typing import (
+    Callable,
+    Concatenate,
+    Iterable,
+    Self,
+    Tuple,
+)
 import gmpy2
 
-ArithmeticNumber = Union[int, float, Decimal, Fraction, gmpy2.mpz, gmpy2.mpfr]
-Probability = float
-ValuePair = Tuple[ArithmeticNumber, Probability]
+
+type BinaryPrecision = gmpy2.mpz | gmpy2.mpfr
+type Number[
+    P: (
+        float,
+        Decimal,
+        Fraction,
+    )
+] = int | P
+type ValuePair[
+    P: (
+        float,
+        Decimal,
+        Fraction,
+    )
+] = Tuple[Number[P], Number[P]]
+type Merged[
+    P: (
+        float,
+        Decimal,
+        Fraction,
+    )
+] = Number[
+    P
+] | Probs[P]
 
 
-Merged = Union[ArithmeticNumber, "Probs"]
-
-
-def _wrap_number(value: Merged) -> "Probs":
-    if isinstance(value, ArithmeticNumber):
+def _wrap_number[P: (
+    float,
+    Decimal,
+    Fraction,
+)](value: Merged[P]) -> "Probs[P]":
+    if isinstance(value, (int, float, Decimal, Fraction)):
         return const(value)
-    else:
-        return value
+    return value
 
 
-R = TypeVar("R")
-
-
-def wrap_number(func: Callable[..., R]) -> Callable[..., R]:
-    def wrapper(*values: Merged):
+def wrap_number[P: (
+    float,
+    Decimal,
+    Fraction,
+), R](func: Callable[Concatenate["Probs[P]", ...], R]) -> Callable[Concatenate[Merged[P], ...], R]:
+    def wrapper(*values: Merged[P]):
         converted = [_wrap_number(v) for v in values]
         return func(*converted)
 
     return wrapper
 
 
-T = TypeVar("T")
-
-
-def wrap_object(default: T) -> Callable[..., Callable[..., T]]:
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        def wrapper(*values: Merged | object) -> T:
-            if any(map(lambda v: not isinstance(v, Merged), values)):
-                return default
-            return func(*values)
+def wrap_object[P: (
+    float,
+    Decimal,
+    Fraction,
+), R](default):
+    def decorator(func: Callable[Concatenate[Probs[P], ...], Number[P]]) -> Callable[Concatenate[Probs[P] | object, ...], Number[P] | R]:
+        def wrapper(*values: Merged[P] | object):
+            if all(map(lambda v: isinstance(v, (int, float, Decimal, Fraction, Probs)), values)):
+                return func(*values)  # type: ignore
+            return default
 
         return wrapper
 
     return decorator
 
 
-class Probs:
+class Probs[P: (float, Decimal, Fraction)]:
     """A discrete probability distribution. Holds the probabilities for a set of values."""
 
-    values: dict[ArithmeticNumber, Probability]
+    values: dict[Number[P], Number[P]]
 
-    def __init__(self, values: Iterable[ValuePair]):
+    def __init__(self, values: Iterable[ValuePair[P]]):
         """Initializes a new distribution from the given value pairs.
 
         Args:
-            values (Iterable[ValuePair]): Iterator with all value pairs.
+            values (Iterable[Tuple[K, P]]): Iterator with all value pairs.
         """
-        self.values = defaultdict(int)
+        self.values = defaultdict()
         for v, p in values:
             self.values[v] += p
 
-    def __contains__(self, element):
+    def __contains__(self, element: Number[P]) -> bool:
         return element in self.values
+
+    def __getitem__(self, index: Number[P]) -> Number[P] | None:
+        if index not in self.values:
+            return None
+        return self.values[index]
 
     def __iter__(self):
         for x in self.values.items():
             yield x
+
+    def mean(self):
+        return sum(k * v for k, v in self)
 
     def __repr__(self):
         return f"Probs::{repr(dict(self.values))}"
@@ -94,17 +132,17 @@ class Probs:
 
     @wrap_object(False)
     def equal(self, other: Self) -> bool:
-        """True, if the underlying values are the same. Value compare."""
+        """True, if the underlying values are the same. Value compare. Use ' self is other' for object compare."""
         return self.values == other.values
 
     @wrap_object(False)
     @wrap_number
-    def __eq__(self, other: Self) -> ArithmeticNumber:
+    def __eq__(self, other: Self):  # type: ignore
         return predicate(lambda a, b: a == b, self, other)
 
     @wrap_object(False)
     @wrap_number
-    def __ne__(self, other: Self) -> ArithmeticNumber:
+    def __ne__(self, other: Self) -> Number[P]:  # type: ignore
         return predicate(lambda a, b: a != b, self, other)
 
     @wrap_number
@@ -156,7 +194,7 @@ class Probs:
         return predicate(lambda a, b: a <= b, self, other)
 
 
-def uniform(to: int, fr: int = 0) -> Probs:
+def uniform(to: int, fr: int = 0) -> Probs[float]:
     """Generates a uniform probability distribution between the given arguments.
 
     Args:
@@ -170,7 +208,11 @@ def uniform(to: int, fr: int = 0) -> Probs:
     return Probs([(n, p) for n in range(fr, to)])
 
 
-def const(value: ArithmeticNumber) -> Probs:
+def const[P: (
+    float,
+    Decimal,
+    Fraction,
+)](value: Number[P]) -> Probs[P]:
     """Generates a distribution with a single value.
 
     Args:
@@ -182,11 +224,15 @@ def const(value: ArithmeticNumber) -> Probs:
     return Probs([(value, 1)])
 
 
-def function(f: Callable[..., ArithmeticNumber], *p: Probs) -> Probs:
+def function[P: (
+    float,
+    Decimal,
+    Fraction,
+)](f: Callable[Concatenate[Number[P], ...], Number[P]], *props: Probs[P]) -> Probs[P]:
     """Evaluates a function and collects the result of all possible combinations of the input distributions.
 
     Args:
-        f (Callable[..., ArithmeticNumber]): The function to be evaluated.
+        f (Callable[Concatenate[Number[P], Number[P]]): The function to be evaluated.
         *p (Probs): The distributions to be inserted into the function.
 
     Returns:
@@ -196,10 +242,21 @@ def function(f: Callable[..., ArithmeticNumber], *p: Probs) -> Probs:
     - calculate the probabilities of "throwing with advantage" in D&D
         >>> advantage = function(max, Dice.D20, Dice.D20)
     """
-    return Probs((f(*n), prod(p)) for n, p in map(lambda x: zip(*x), product(*p)))
+
+    def map_function(*state: Tuple[Number[P], Number[P]]) -> Tuple[Number[P], Number[P]]:
+        v, p = zip(*state)  # switch the order of the arguments.
+        value = f(*v)  # key of the resulting entry
+        prob = prod(p)  # probability of the resulting entry
+        return value, prob
+
+    return Probs(map_function(*state) for state in product(*props))
 
 
-def predicate(f: Callable[..., bool], *probs: Probs) -> ArithmeticNumber:
+def predicate[P: (
+    float,
+    Decimal,
+    Fraction,
+)](f: Callable[Concatenate[Number[P], ...], bool], *probs: Probs[P]) -> Number[P]:
     """Evaluates a boolean expression of all possible combinations of the input distributions.
 
     Args:
@@ -215,4 +272,9 @@ def predicate(f: Callable[..., bool], *probs: Probs) -> ArithmeticNumber:
         b = Dice.D20 - 1
         better = predicate(lambda x, y: x > y, a, b)
     """
-    return sum(prod(p) for n, p in map(lambda x: zip(*x), product(*probs)) if f(*n))  # type: ignore
+
+    def map_predicate(*state: Tuple[Number[P], Number[P]]) -> Number[P]:
+        v, p = zip(*state)  # switch the order of the arguments.
+        return prod(p) if f(*v) else 0  # probability if valid, else zero
+
+    return sum(map_predicate(*state) for state in product(*probs))
