@@ -1,6 +1,6 @@
 from discrete_probability import Probs, uniform
 
-def D(n: int) -> Probs:
+def D(n: int) -> Probs[float]:
     return uniform(n) + 1
 
 D4 = D(4)
